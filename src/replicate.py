@@ -590,7 +590,7 @@ def setup_leaf_node(cassandra_server, keyspace, listen_hostname, listen_port, si
     cluster = None
     try:
         shards = shard_generator(SHARDS)
-        cluster, session = cassandra_connect("localhost", keyspace)
+        cluster, session = cassandra_connect(cassandra_server, keyspace)
 
         server = CscoHTTPServer(session, shards, leaf_node_dispatcher, ('0.0.0.0', listen_port), CscoHandler)
         print('Started http server')
