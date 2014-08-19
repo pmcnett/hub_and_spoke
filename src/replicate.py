@@ -161,11 +161,16 @@ def shard_generator(shards):
         i += 1
 
 
-def cassandra_connect(seed, keyspace=None):
+def cassandra_connect(seed=None, keyspace=None):
     from cassandra.cluster import Cluster
     from cassandra.io.libevreactor import LibevConnection
 
-    cluster = Cluster()
+    if seed is None:
+        args = ()
+    else:
+        args = ([seed],)
+    cluster = Cluster(*args)
+
     cluster.connection_class = LibevConnection
     return cluster, cluster.connect(keyspace)
 
