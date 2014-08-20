@@ -87,7 +87,6 @@ EXAMPLE_MESSAGE_MOCK = """
 """
 
 from BaseHTTPServer import BaseHTTPRequestHandler, HTTPServer
-from BaseHTTPServer import BaseHTTPRequestHandler, HTTPServer
 from multiprocessing import Process
 from optparse import OptionParser
 import cgi
