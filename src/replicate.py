@@ -102,6 +102,15 @@ import urllib
 import urllib2
 import urlparse
 import uuid
+import logging
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.ERROR)
+ch = logging.StreamHandler()
+ch.setLevel(logging.ERROR)
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+ch.setFormatter(formatter)
+logger.addHandler(ch)
 
 BOUNDARY_CHARS = string.digits + string.ascii_letters
 
@@ -489,37 +498,37 @@ def manage_queues(cassandra_server, keyspace, my_id, message_dispatch, interval=
     shards = shard_generator(SHARDS)
 
     while True:
-        print "checking queues for messages"
+        logger.debug("checking queues for messages")
         cluster = None
 
         try:
             cluster, session = cassandra_connect(cassandra_server, keyspace)
-            print "connected to cassandra"
+            logger.debug("connected to cassandra")
 
             for site_id, node in get_nodes(session):
-                print "checking remote queue %s on host %s for data" % (my_id, node)
+                logger.debug("checking remote queue %s on host %s for data" % (my_id, node))
                 messages = client_get_queue(node, my_id)
-                print "found %s messages in remote queue %s on host %s" % (len(messages), my_id, node)
+                logger.info("found %s messages in remote queue %s on host %s" % (len(messages), my_id, node))
                 for msgid, message in messages:
                     persist_message(session, message)
                     dispatch_queues = [x for x in message_dispatch(message) if x != site_id]
-                    print "dispatching %s to queues %s" % (msgid, dispatch_queues)
+                    logger.debug("dispatching %s to queues %s" % (msgid, dispatch_queues))
                     enqueue_message(session, next(shards), dispatch_queues, message)
 
                 if len(messages) > 0:
-                    print "deleting messages %s from remote queue %s on %s" % ([x[0] for x in messages], my_id, node)
-                    print "received HTTP %s from %s" % (client_delete_message(node, my_id, [x[0] for x in messages]), node)
+                    logger.info("deleting messages %s from remote queue %s on %s" % ([x[0] for x in messages], my_id, node))
+                    logger.debug("received HTTP %s from %s" % (client_delete_message(node, my_id, [x[0] for x in messages]), node))
 
-                print "checking local queue %s for messages destined for %s" % (site_id, node)
+                logger.debug("checking local queue %s for messages destined for %s" % (site_id, node))
                 messages = get_queue_messages(session, site_id, SHARDS)
-                print "found %s messages in local queue %s for %s" % (len(messages), site_id, node)
+                logger.info("found %s messages in local queue %s for %s" % (len(messages), site_id, node))
 
                 if len(messages) > 0:
-                    print "posting messages %s to %s" % ([x[0] for x in messages], node)
-                    print "received HTTP %s from %s" % (client_post_message(node, [x[-1] for x in messages], True), node)
+                    logger.info("posting messages %s to %s" % ([x[0] for x in messages], node))
+                    logger.debug("received HTTP %s from %s" % (client_post_message(node, [x[-1] for x in messages], True), node))
 
                 for message, _ in messages:
-                    print "deleting message %s from local queue %s" % (message, site_id)
+                    logger.info("deleting message %s from local queue %s" % (message, site_id))
                     delete_queue_message(session, site_id, message)
 
         except Exception, e:
@@ -538,7 +547,7 @@ def manage_queues(cassandra_server, keyspace, my_id, message_dispatch, interval=
 def periodically_register_node(host, site_id, listen_address, interval=5*60):
     while True:
         try:
-            print client_register_node(host, site_id, listen_address)
+            logger.debug(client_register_node(host, site_id, listen_address))
 
         except Exception, e:
             traceback.print_exc()
@@ -571,11 +580,11 @@ def setup_central_broker(cassandra_server, keyspace, listen_hostname, listen_por
         cluster, session = cassandra_connect(cassandra_server, keyspace)
 
         server = CscoHTTPServer(session, shards, dispatcher, ('0.0.0.0', listen_port), CscoHandler)
-        print('Started http server')
+        logger.info('Started http server')
         server.serve_forever()
 
     except KeyboardInterrupt:
-        print('^C received, shutting down server')
+        logger.info('^C received, shutting down server')
         server.socket.close()
 
     finally:
@@ -596,11 +605,11 @@ def setup_leaf_node(cassandra_server, keyspace, listen_hostname, listen_port, si
         cluster, session = cassandra_connect(cassandra_server, keyspace)
 
         server = CscoHTTPServer(session, shards, leaf_node_dispatcher, ('0.0.0.0', listen_port), CscoHandler)
-        print('Started http server')
+        logger.info('Started http server')
         server.serve_forever()
 
     except KeyboardInterrupt:
-        print('^C received, shutting down server')
+        logger.info('^C received, shutting down server')
         server.socket.close()
 
     finally:
@@ -675,31 +684,31 @@ if __name__ == "__main__":
     initialize = options.initialize
 
     if post:
-        print "posting sample messages to %s" % post
+        logger.info("posting sample messages to %s" % post)
         messages = [json.loads(x, object_hook=message_decoder) for x in [EXAMPLE_MESSAGE_1, EXAMPLE_MESSAGE_2]]
-        print client_post_message(post, messages)
+        logger.info(client_post_message(post, messages))
         exit(0)
 
     if mock:
-        print "posting sample messages to %s" % mock
+        logger.info("posting sample messages to %s" % mock)
         while True:
             serial_number = random.randrange(10000)
             item_number = random.randrange(10000)
             site_id = random.choice([242, 241, 240])
-            print "posting message with serial_number %s, item_number %s, and site_id %s" % (serial_number, item_number, site_id)
+            logger.info("posting message with serial_number %s, item_number %s, and site_id %s" % (serial_number, item_number, site_id))
             message = json.loads(generate_mock_message(serial_number, item_number, site_id), object_hook=message_decoder)
-            print client_post_message(mock, [message])
+            logger.debug(client_post_message(mock, [message]))
             time.sleep(.5)
 
         exit(0)
 
     if not keyspace:
-        print "no keyspace specified"
+        logger.error("no keyspace specified")
         parser.print_help()
         exit(1)
 
     if initialize:
-        print "initializing keyspace and column families"
+        logger.info("initializing keyspace and column families")
         cluster, session = cassandra_connect(seed)
         initialize_cluster(session, keyspace)
         cluster.shutdown()
@@ -707,14 +716,14 @@ if __name__ == "__main__":
 
     if leaf:
         if not central_server:
-            print "leaf node neads to know which server to use as the central broker"
+            logger.error("leaf node neads to know which server to use as the central broker")
             exit(1)
 
-        print "starting leaf node"
+        logger.info("starting leaf node")
         setup_leaf_node(seed, keyspace, hostname, port, leaf, central_server)
 
     elif central:
-        print "starting central node"
+        logger.info("starting central node")
         setup_central_broker(seed, keyspace, hostname, port, central_dispatcher)
 
     else:
